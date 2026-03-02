@@ -1,0 +1,98 @@
+@page "/product"
+@rendermode InteractiveServer
+
+<div class="products-shell">
+    <section class="products-card">
+        <header class="products-header">
+            <div>
+                <h3>Products</h3>
+                <p>Organize your list with quick add and delete actions.</p>
+            </div>
+            <span class="product-count">@products.Count item(s)</span>
+        </header>
+
+        <div class="add-row">
+            <InputText class="form-control product-input" @bind-Value="name" placeholder="Enter product name..." />
+            <button class="btn btn-primary add-btn" type="button" @onclick="AddProduct" disabled="@string.IsNullOrWhiteSpace(name)">
+                Add Product
+            </button>
+        </div>
+
+        @if (products.Count == 0)
+        {
+            <div class="empty-state">No products yet. Add your first one above.</div>
+        }
+        else
+        {
+            <ul class="products-list">
+                @foreach (var item in products)
+                {
+                    @* <li class="product-item">
+                        <span>@item</span>
+                        <button class="btn btn-outline-danger btn-sm" type="button" @onclick="() => Delete(item)">Delete</button>
+                    </li> *@
+                    @* addition *@
+                    <li class="product-item">
+                        @if (editIndex == products.IndexOf(item))
+                        {
+                            <InputText @bind-Value="editName" class="form-control" />
+                            <button class="btn btn-success btn-sm" @onclick="() => Update(editIndex)">Save</button>
+                            <button class="btn btn-secondary btn-sm" @onclick="CancelEdit">Cancel</button>
+                        }
+                        else
+                        {
+                            <span>@item</span>
+                            <button class="btn btn-outline-warning btn-sm" @onclick="() => StartEdit(products.IndexOf(item))">Edit</button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(item)">Delete</button>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>
+
+@code {
+    private List<string> products = new(){};
+    private string name = string.Empty;
+
+    void AddProduct()
+    {
+        var value = name.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        products.Add(value);
+        name = string.Empty;
+    }
+
+    void Delete(string item)
+    {
+        products.Remove(item);
+    }
+    //update addition
+     private int editIndex = -1;
+    private string editName =null!;
+   void StartEdit(int index)
+    {
+        editIndex = index;
+        editName = products[index];
+    }
+
+    void Update(int index)
+    {
+        if (!string.IsNullOrWhiteSpace(editName))
+        {
+            products[index] = editName.Trim();
+        }
+        CancelEdit();
+    }
+
+    void CancelEdit()
+    {
+        editIndex = -1;
+        editName = string.Empty;
+    }
+}
