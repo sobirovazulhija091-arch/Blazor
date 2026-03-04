@@ -1,98 +1,157 @@
 @page "/product"
 @rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
 
-<div class="products-shell">
-    <section class="products-card">
-        <header class="products-header">
-            <div>
-                <h3>Products</h3>
-                <p>Organize your list with quick add and delete actions.</p>
-            </div>
-            <span class="product-count">@products.Count item(s)</span>
-        </header>
+@inject ApplicationDbContext db
 
-        <div class="add-row">
-            <InputText class="form-control product-input" @bind-Value="name" placeholder="Enter product name..." />
-            <button class="btn btn-primary add-btn" type="button" @onclick="AddProduct" disabled="@string.IsNullOrWhiteSpace(name)">
-                Add Product
-            </button>
+<h3 class="title">Products</h3>
+
+<EditForm Model="newProduct" OnValidSubmit="AddProduct">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-card">
+
+        <div class="form-group">
+            <label>Product Name</label>
+            <InputText @bind-Value="newProduct.Name" class="input" />
         </div>
 
-        @if (products.Count == 0)
-        {
-            <div class="empty-state">No products yet. Add your first one above.</div>
-        }
-        else
-        {
-            <ul class="products-list">
-                @foreach (var item in products)
+        <div class="form-group">
+            <label>Price</label>
+            <InputNumber @bind-Value="newProduct.Price" class="input" />
+        </div>
+
+        <div class="form-group">
+            <label>Category</label>
+            <InputSelect @bind-Value="newProduct.CategoryId" class="input">
+                <option value="">-- Select Category --</option>
+                @foreach (var c in categories)
                 {
-                    @* <li class="product-item">
-                        <span>@item</span>
-                        <button class="btn btn-outline-danger btn-sm" type="button" @onclick="() => Delete(item)">Delete</button>
-                    </li> *@
-                    @* addition *@
-                    <li class="product-item">
-                        @if (editIndex == products.IndexOf(item))
-                        {
-                            <InputText @bind-Value="editName" class="form-control" />
-                            <button class="btn btn-success btn-sm" @onclick="() => Update(editIndex)">Save</button>
-                            <button class="btn btn-secondary btn-sm" @onclick="CancelEdit">Cancel</button>
-                        }
-                        else
-                        {
-                            <span>@item</span>
-                            <button class="btn btn-outline-warning btn-sm" @onclick="() => StartEdit(products.IndexOf(item))">Edit</button>
-                            <button class="btn btn-outline-danger btn-sm" @onclick="() => Delete(item)">Delete</button>
-                        }
-                    </li>
+                    <option value="@c.Id">@c.Name</option>
                 }
-            </ul>
+            </InputSelect>
+        </div>
+
+        <button type="submit" class="btn">Add Product</button>
+
+    </div>
+</EditForm>
+
+<hr />
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Price</th>
+            <th>Category</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var p in products)
+        {
+            <tr>
+                <td>@p.Name</td>
+                <td>@p.Price.ToString("0.00")</td>
+                <td>@p.CategoryName</td>
+                <td>
+                    <button class="btn-delete"
+                            @onclick="() => DeleteProduct(p.Id)">
+                        Delete
+                    </button>
+                </td>
+            </tr>
         }
-    </section>
-</div>
+    </tbody>
+</table>
 
 @code {
-    private List<string> products = new(){};
-    private string name = string.Empty;
 
-    void AddProduct()
+    List<ProductRow> products = new();
+    List<Category> categories = new();
+
+    ProductCreateDto newProduct = new();
+
+    protected override async Task OnInitializedAsync()
     {
-        var value = name.Trim();
-        if (string.IsNullOrWhiteSpace(value))
+        await LoadCategories();
+        await LoadProducts();
+    }
+
+    async Task LoadCategories()
+    {
+        categories = await db.Categories
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+    }
+
+    async Task LoadProducts()
+    {
+        products = await db.Products
+            .Include(p => p.Category)
+            .OrderByDescending(x => x.Id)
+            .Select(p => new ProductRow
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Price = p.Price,
+                CategoryName = p.Category != null ? p.Category.Name : "N/A"
+            })
+            .ToListAsync();
+    }
+
+    async Task AddProduct()
+    {
+        if (newProduct.CategoryId == 0)
         {
+            // You can show validation here if needed
             return;
         }
 
-        products.Add(value);
-        name = string.Empty;
-    }
-
-    void Delete(string item)
-    {
-        products.Remove(item);
-    }
-    //update addition
-     private int editIndex = -1;
-    private string editName =null!;
-   void StartEdit(int index)
-    {
-        editIndex = index;
-        editName = products[index];
-    }
-
-    void Update(int index)
-    {
-        if (!string.IsNullOrWhiteSpace(editName))
+        db.Products.Add(new global::Product
         {
-            products[index] = editName.Trim();
-        }
-        CancelEdit();
+            Name = newProduct.Name.Trim(),
+            Price = newProduct.Price,
+            CategoryId = newProduct.CategoryId
+        });
+
+        await db.SaveChangesAsync();
+
+        newProduct = new ProductCreateDto();
+        await LoadProducts();
     }
 
-    void CancelEdit()
+    async Task DeleteProduct(int id)
     {
-        editIndex = -1;
-        editName = string.Empty;
+        var p = await db.Products.FindAsync(id);
+        if (p is null) return;
+
+        db.Products.Remove(p);
+        await db.SaveChangesAsync();
+        await LoadProducts();
+    }
+
+    class ProductRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public decimal Price { get; set; }
+        public string CategoryName { get; set; } = "";
+    }
+
+    class ProductCreateDto
+    {
+        [Required]
+        [MinLength(2)]
+        public string Name { get; set; } = "";
+
+        [Range(0.01, 999999)]
+        public decimal Price { get; set; }
+
+        [Required]
+        public int CategoryId { get; set; } = 0;
     }
 }
